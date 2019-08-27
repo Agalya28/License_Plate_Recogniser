@@ -1,0 +1,68 @@
+import numpy as np
+import cv2
+import imutils
+import pytesseract as tess
+from PIL import Image
+import xlwt
+from xlwt import Workbook
+tess.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+image = cv2.imread('numberplate/sample230.jpg')
+image = imutils.resize(image, width=500)
+wb = Workbook()
+
+#cv2.imshow("INPUT IMAGE", image)
+
+scale_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+#cv2.imshow("1 - Grayscale Conversion", scale_gray)#1
+
+bilateral = cv2.bilateralFilter(scale_gray, 11, 17, 17)
+#cv2.imshow("2 - Bilateral Filter", bilateral)#2
+
+canny_edge = cv2.Canny(bilateral, 170, 200)
+#cv2.imshow("4 - Canny Edges", canny_edge)#3
+
+#cv2.waitKey(0)
+#cv2.destroyAllWindows()#4
+
+(cnts,_) = cv2.findContours(canny_edge.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)#removed new
+contour=sorted(cnts, key = cv2.contourArea, reverse = True)[:30]
+NumberPlateCnt = None
+
+count = 0
+for c in contour:
+        perim = cv2.arcLength(c, True)
+        approximate = cv2.approxPolyDP(c, 0.02 * perim, True)
+        if len(approximate) == 4:
+            NumberPlateCnt = approximate
+            break
+
+ #display original image with contours
+#cv2.namedWindow("output", cv2.WINDOW_NORMAL)
+#cv2.imshow("output", image)
+#cv2.waitKey(0)
+cv2.drawContours(canny_edge, [NumberPlateCnt], -1, (0,255,0), 3)
+#cv2.imshow("checker again",canny_edge)
+
+# Masking the part other than the number plate
+mask_image = np.zeros(bilateral.shape,np.uint8)
+#cv2.imshow("mask",mask_image)
+#cv2.waitKey(0)
+new_image = cv2.drawContours(mask_image,[NumberPlateCnt],0,255,-1)
+#cv2.imshow("countours",new_image)
+new_image = cv2.bitwise_and(image,image,mask=mask_image)
+#cv2.imshow("bitwise",new_image)
+#cv2.namedWindow("Final_image",cv2.WINDOW_NORMAL)
+#cv2.imshow("Final_image",new_image)
+dst = cv2.fastNlMeansDenoisingColored(new_image,None,10,10,7,21)
+#cv2.imshow("noisy",dst)
+#cv2.waitKey(0)
+cv2.imwrite("Final_image.png",dst)
+
+numberplate=tess.image_to_string(Image.open('Final_image.png'))
+print(numberplate)
+sheet1 = wb.add_sheet('Sheet 1')
+sheet1.write(0, 0, "Plate_Number")
+sheet1.write(1, 0, numberplate)
+
+wb.save('Number_Plate.xls')
+
